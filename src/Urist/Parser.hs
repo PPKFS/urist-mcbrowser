@@ -2,24 +2,39 @@ module Urist.Parser where
 
 import Solitude
 import qualified Xeno.DOM as XML
+import Breadcrumbs
+import Urist.Region
+import Urist.UndergroundRegion
+import Urist.ParseHelpers
+import Urist.Site
+
 data DfWorld
 
-parse :: Eff es DfWorld
-parse = do
-  f <- liftIO $ readFileBS "region1-00250-01-01-legends.xml"
-  case XML.parse f of
+parse :: (Breadcrumbs :> es, (State (Set Text) :> es), IOE :> es) => FilePath -> Eff es ()
+parse fp = withSpan' "XML parsing" "df_world" $ do
+  f <- liftIO $ readFileBS fp
+  addAnnotation "Read file"
+  let dom = XML.parse f
+  addAnnotation "DOM parsed"
+  case dom of
     Left er -> error $ show er
-    Right n -> pure $ parseDom n
+    Right n -> parseDom n
 
-parseDom :: XML.Node -> [XML.Node]
-parseDom root = do
+parseDom :: (State (Set Text) :> es) => XML.Node -> Eff es () -- [XML.Node]
+parseDom root = withExpectedNode' "df_world" root $ do
+  let pairs = childrenToAssocList root
+  regions <- fromListOfEntries "regions" parseRegion pairs
+  undergroundRegions <- fromListOfEntries "underground_regions" parseUndergroundRegion pairs
+  sites <- fromListOfEntries "sites" parseSite pairs
+  --liftIO $ forM_ regions print
+  pass
+
   -- insert verification that indeed we are on the top node..
-  map (\n -> parseWorldItem (decodeUtf8 $ XML.name n) n) (XML.children root)
-
+  --map (\n -> parseWorldItem (decodeUtf8 $ XML.name n) n) (XML.children root)
+{-}
+data WorldItem
 parseWorldItem :: Text -> XML.Node -> WorldItem
 parseWorldItem = \case
- "regions" -> parseRegions
- "underground_regions" -> parseUndergroundRegions
  "sites" -> parseSites
  "world_constructions" -> parseWorldConstructions
  "artifacts" -> parseArtifacts
@@ -34,16 +49,7 @@ parseWorldItem = \case
  "musical_forms" -> parseMusicalForms
  "dance_forms" -> parseDanceForms
  x -> failOnUnknownNodeType x
-
-parseRegions :: XML.Node -> XML.Node
-parseRegions = withExpectedNode "regions" $ forEachChild "region" parseRegion
-
-withExpectedNode :: Text -> (XML.Node -> a) -> XML.Node -> a
-withExpectedNode = _
-
-forEachChild :: t0 -> t1 -> a0
-forEachChild = _
-
+-}
 
 
 failOnUnknownNodeType :: Text -> XML.Node -> XML.Node

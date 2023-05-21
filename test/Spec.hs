@@ -2,7 +2,7 @@
 
 module Main ( main ) where
 
-import Solitude
+import Solitude hiding (State)
 
 import Data.Aeson ( decodeFileStrict, encodeFile )
 import Breadcrumbs
@@ -17,6 +17,8 @@ import qualified Data.Map as M
 import Urist.Parser
 import Test.Tasty.HUnit
 import qualified Xeno.DOM as X
+import Data.Set as S
+import Effectful.State.Dynamic
 
 -- this is a rip of tasty's main, but hooking my own global `TraceID` through it for
 -- better Zipkin traces.
@@ -56,7 +58,7 @@ getAndIncrementRunNumber = do
 
 mkTree :: TestTree
 mkTree = testGroup "can run the parser" $ [testCase "stuff" $ do
-  r <- parse
-  print $ map X.name r
+  errs <- runEff $ runBreadcrumbs Nothing $ execStateLocal S.empty $ parse "region1-00250-01-01-legends.xml"
+  print errs
   error ""
   ]
