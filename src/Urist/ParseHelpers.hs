@@ -141,3 +141,16 @@ readHelper n t = case readMaybe (toString . convertSiteType $ t) of
 
 getNodeMaybe :: ByteString -> Map ByteString XML.Node -> Eff es (Maybe XML.Node)
 getNodeMaybe = (pure .) . M.lookup
+
+getNode :: Error Text :> es => ByteString -> Map ByteString XML.Node -> Eff es XML.Node
+getNode k m = case k `M.lookup` m of
+  Nothing -> throwError $ show $ "Could not find node " <> k
+  Just r -> pure r
+
+coalesceNodeIntMaybe :: Error Text :> es => [ByteString] -> Map ByteString XML.Node -> Eff es (Maybe Int)
+coalesceNodeIntMaybe [] _ = pure Nothing
+coalesceNodeIntMaybe (x:xs) m = do
+  mbX <- getNodeIntMaybe x m
+  case mbX of
+    Nothing -> coalesceNodeIntMaybe xs m
+    Just r -> pure (Just r)

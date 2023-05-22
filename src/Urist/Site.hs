@@ -8,6 +8,7 @@ import qualified Data.EnumMap as EM
 import Data.Attoparsec.Text
 import Urist.Structure
 import Urist.HistoricalFigure
+import Urist.Id
 
 data SiteType =
   Hillocks

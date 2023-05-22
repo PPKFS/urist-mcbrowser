@@ -25,3 +25,7 @@ newtype LocalStructureId = LocalStructureId Int
 newtype EntityId = EntityId Int
   deriving newtype (Show, Read, Ord, Eq, Num, Bounded, Enum)
   deriving stock (Generic)
+
+newtype WrittenContentId = WrittenContentId Int
+  deriving newtype (Show, Read, Ord, Eq, Num, Bounded, Enum)
+  deriving stock (Generic)

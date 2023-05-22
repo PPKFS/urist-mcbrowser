@@ -7,6 +7,7 @@ import Urist.Region
 import Urist.UndergroundRegion
 import Urist.ParseHelpers
 import Urist.Site
+import Urist.Artifact (parseArtifact)
 
 data DfWorld
 
@@ -26,6 +27,7 @@ parseDom root = withExpectedNode' "df_world" root $ do
   regions <- fromListOfEntries "regions" parseRegion pairs
   undergroundRegions <- fromListOfEntries "underground_regions" parseUndergroundRegion pairs
   sites <- fromListOfEntries "sites" parseSite pairs
+  artifacts <- fromListOfEntries "artifacts" parseArtifact pairs
   --liftIO $ forM_ regions print
   pass
 

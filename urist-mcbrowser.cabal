@@ -68,6 +68,7 @@ library
     Urist.Structure
     Urist.HistoricalFigure
     Urist.Id
+    Urist.Artifact
 
 test-suite urist-mcbrowser-test
   import:             common-options
