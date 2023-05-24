@@ -47,7 +47,7 @@ isDungeon _ = False
 
 parseStructure :: (Error Text :> es) => XML.Node -> Eff es Structure
 parseStructure n = do
-  let m = childrenToAssocList n
+  let m = nodeChildrenToMap n
   expectOnly ["local_id", "type", "name", "entity_id", "worship_hfid", "copied_artifact_id", "subtype"] m
   localStructureId <- LocalStructureId <$> getNodeInt "local_id" m
   name <- parseName m

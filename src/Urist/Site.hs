@@ -71,7 +71,7 @@ parseSite m = do
 
 parseSiteProperty :: (Error Text :> es) => XML.Node -> Eff es SiteProperty
 parseSiteProperty n = do
-  let m = childrenToAssocList n
+  let m = nodeChildrenToMap n
   ensureNoDuplicateIds n m
   expectOnly ["id", "type", "owner_hfid", "structure_id"] m
   sitePropertyId <- parseId SitePropertyId m

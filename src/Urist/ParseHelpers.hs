@@ -23,19 +23,21 @@ withExpectedNode' nodeName n go = do
     Left e -> error $ show e
     Right r' -> pure r'
 
-childrenToAssocList :: XML.Node -> Map ByteString XML.Node
-childrenToAssocList = M.fromList . map (toFst XML.name) . XML.children
+-- | Convert an XML.Node to a map of its children indexed by name.
+-- !!! do not use if there may be multiple children with the same name!
+nodeChildrenToMap :: XML.Node -> Map ByteString XML.Node
+nodeChildrenToMap = M.fromList . map (toFst XML.name) . XML.children
 
 getNodeText :: (Error Text :> es) => ByteString -> Map ByteString XML.Node -> Eff es Text
 getNodeText key m = do
   case M.lookup key m of
-    Nothing -> throwError $ "could not find key " <> show key
-    Just r -> checkTextContent r
+    Nothing -> throwError $ "could not find key " <> show key <> " in " <> show m
+    Just r -> either throwError pure $ checkTextContent r
 
-checkTextContent :: (Error Text :> es) => XML.Node -> Eff es Text
+checkTextContent :: XML.Node -> Either Text Text
 checkTextContent r = case XML.contents r of
   [XML.Text t] -> pure (decodeUtf8 t)
-  v -> throwError $ "Expected a text node but instead got " <> show v
+  v -> Left $ "Expected a text node but instead got " <> show v
 
 getNodeTextMaybe :: (Error Text :> es) => ByteString -> Map ByteString XML.Node -> Eff es (Maybe Text)
 getNodeTextMaybe key m = do
@@ -114,7 +116,7 @@ fromListOfEntries name f lst = do
   let relevantNode = fromMaybe (error $ show $ "Could not find node " <> name) $ M.lookup name lst
   let itemName = encodeUtf8 $ T.init (decodeUtf8 name)
   withExpectedNode' name relevantNode $ mapMaybeM (\n -> do
-    runError (subsume $ withExpectedNode itemName n (f (childrenToAssocList n))) >>= \case
+    runError (subsume $ withExpectedNode itemName n (f (nodeChildrenToMap n))) >>= \case
       Left (_cs, err) -> do
         noteError err
         pure Nothing
