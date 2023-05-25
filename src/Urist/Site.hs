@@ -31,8 +31,6 @@ data SiteType =
   | Vault
   | Cave
   deriving stock (Show, Read, Ord, Eq, Bounded, Enum, Generic)
-
-type Coord = (Int, Int)
 type Rectangle = (Coord, Coord)
 
 data SitePropertyType = House deriving stock (Show, Read, Eq)

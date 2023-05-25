@@ -2,8 +2,6 @@ module Urist.UndergroundRegion where
 
 import Solitude
 import Effectful.Error.Static
-import Data.Char
-import qualified Xeno.DOM as XML
 import Urist.ParseHelpers
 
 newtype UndergroundRegionId = UndergroundRegionId Int
@@ -23,10 +21,9 @@ data UndergroundRegion = UndergroundRegion
   , undergroundRegionType :: UndergroundRegionType
   } deriving stock (Show)
 
-parseUndergroundRegion :: (Error Text :> es) => Map ByteString XML.Node -> Eff es UndergroundRegion
-parseUndergroundRegion m = do
-  expectOnly ["id", "depth", "type"] m
-  undergroundRegionId <- parseId UndergroundRegionId m
-  depth <- UndergroundRegionDepth <$> getNodeInt "depth" m
-  undergroundRegionType <- parseType "underground region" m
+parseUndergroundRegion :: (Error Text :> es, State NodeMap :> es) => Eff es UndergroundRegion
+parseUndergroundRegion = do
+  undergroundRegionId <- takeId UndergroundRegionId
+  depth <- UndergroundRegionDepth <$> takeNodeAsInt "depth"
+  undergroundRegionType <- takeNodeAsReadable "type"
   pure $ UndergroundRegion { undergroundRegionId, depth, undergroundRegionType }

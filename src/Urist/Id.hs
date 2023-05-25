@@ -37,3 +37,9 @@ newtype HistoricalFigureId = HistoricalFigureId Int
 newtype WorldConstructionId = WorldConstructionId Int
   deriving newtype (Show, Ord, Eq, Num, Bounded, Enum)
   deriving stock (Generic)
+
+newtype ForceId = ForceId Int
+  deriving newtype (Show, Ord, Eq, Num, Bounded, Enum)
+  deriving stock (Generic)
+
+type Coord = (Int, Int)

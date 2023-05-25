@@ -8,8 +8,10 @@ import Data.Attoparsec.Text
 import Effectful.Optics ((%%=))
 import qualified Data.Text as T
 import Data.Char (toUpper)
+import qualified Data.Set as S
+import Urist.Id
 
-newtype XMLItem = XMLItem (Either XML.Node [XML.Node])
+newtype XMLItem = XMLItem (Either XML.Node [XML.Node]) deriving newtype (Show)
 type NodeMap = Map ByteString XMLItem
 
 throwEither :: Error a :> es => Either a b -> Eff es b
@@ -51,6 +53,16 @@ takeId = flip fmap (asInt =<< takeNode "id")
 asInt :: Error Text :> es => XML.Node -> Eff es Int
 asInt = throwEither . eitherNodeInt
 
+takeNodeAsInt :: (Error Text :> es, State NodeMap :> es) => ByteString -> Eff es Int
+takeNodeAsInt = takeNode >=> asInt
+
+-- | loooooooong feesh
+(>==>) :: (Traversable f, Monad m) => (a -> m (f b)) -> (b -> m c) -> a -> m (f c)
+(>==>) = (. mapM) . flip . ((>>=) .)
+
+takeNodeMaybeAsInt :: (Error Text :> es, State NodeMap :> es) => ByteString -> Eff es (Maybe Int)
+takeNodeMaybeAsInt = takeNodeMaybe >==> asInt
+
 toReadableValue :: Text -> Text
 toReadableValue = mconcat . map (over _head toUpper) . T.words
 
@@ -59,6 +71,9 @@ asReadable n t = throwMaybe ("Unknown " <> n <> " type: " <> toText t) . readMay
 
 takeNodeAsReadable :: (Read a, Error Text :> es, State NodeMap :> es) => ByteString -> Eff es a
 takeNodeAsReadable = liftA2 (>>=) takeNodeAsText (asReadable . decodeUtf8)
+
+takeNodeMaybe :: (Error Text :> es, State NodeMap :> es) => ByteString -> Eff es (Maybe XML.Node)
+takeNodeMaybe = fmap rightToMaybe . tryError . takeNode
 
 takeNode :: (Error Text :> es, State NodeMap :> es) => ByteString -> Eff es XML.Node
 takeNode = takeXmlItem >=> \case
@@ -71,3 +86,6 @@ takeNode = takeXmlItem >=> \case
 
 takeXmlItem :: (Error Text :> es, State NodeMap :> es) => ByteString -> Eff es XMLItem
 takeXmlItem k = simple %%= M.updateLookupWithKey (\_ _ -> Nothing) k >>= throwMaybe ("Could not find node by name: " <> show k)
+
+asCoordList :: Text -> Eff es (S.Set Coord)
+asCoordList = mapM (mapM (throwError . first toText . parseOnly (signed decimal)) . T.split (==',')) .  T.split (=='|')
