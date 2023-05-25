@@ -2,7 +2,6 @@ module Urist.Region where
 
 import Solitude
 import Effectful.Error.Static
-import qualified Xeno.DOM as XML
 import Urist.ParseHelpers
 import Urist.Id
 
@@ -25,10 +24,9 @@ data Region = Region
   , regionType :: RegionType
   } deriving stock (Show)
 
-parseRegion :: (Error Text :> es) => Map ByteString XML.Node -> Eff es Region
-parseRegion m = do
-  expectOnly ["id", "name", "type"] m
-  regionId <- parseId RegionId m
-  name <- getNodeText "name" m
-  regionType <- parseType "region" m
+parseRegion :: (Error Text :> es, State NodeMap :> es) => Eff es Region
+parseRegion = do
+  regionId <- takeId RegionId
+  name <- takeNodeAsText "name"
+  regionType <- takeNodeAsReadable "type"
   pure $ Region { regionId, name, regionType }

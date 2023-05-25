@@ -58,7 +58,7 @@ getAndIncrementRunNumber = do
 
 mkTree :: TestTree
 mkTree = testGroup "can run the parser" $ [testCase "stuff" $ do
-  errs <- runEff $ runBreadcrumbs Nothing $ execStateLocal S.empty $ parse "region1-00250-01-01-legends.xml" "region1-00250-01-01-legends_plus.xml"
+  errs <- runEff $ runBreadcrumbs Nothing $ parse "region1-00250-01-01-legends.xml" "region1-00250-01-01-legends_plus.xml"
   print errs
   error ""
   ]

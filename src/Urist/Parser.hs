@@ -4,17 +4,16 @@ import Solitude
 import qualified Xeno.DOM as XML
 import Breadcrumbs
 import Urist.Region
-import Urist.UndergroundRegion
-import Urist.ParseHelpers
-import Urist.Site
-import Urist.Artifact (parseArtifact)
+--import Urist.UndergroundRegion
+--import Urist.Site
+--import Urist.Artifact (parseArtifact)
 import qualified Data.Map as M
-import Data.Attoparsec.Text
+import Urist.ParseHelpers
 import Effectful.Error.Static
 
 data DfWorld
 
-parse :: (Breadcrumbs :> es, (State (Set Text) :> es, Error Text :> es), IOE :> es) => FilePath -> FilePath -> Eff es (Either (CallStack, Text) ())
+parse :: (Breadcrumbs :> es, IOE :> es) => FilePath -> FilePath -> Eff es (Either (CallStack, Text) ())
 parse fp fp2 = withSpan' "XML parsing" "df_world" $ do
   vanillaFile <- liftIO $ readFileBS fp
   addAnnotation "Read vanilla legends.xml"
@@ -23,7 +22,6 @@ parse fp fp2 = withSpan' "XML parsing" "df_world" $ do
   let vanillaDom = XML.parse vanillaFile
   addAnnotation "legends.xml DOM parsed"
   let plusDom = XML.parse hackFile
-
   case (vanillaDom, plusDom) of
     (Right v, Right p) -> do
       case buildIntermediateWorldRep v p of
@@ -32,18 +30,26 @@ parse fp fp2 = withSpan' "XML parsing" "df_world" $ do
       --let removeToplevel x = fromMaybe (error "the dom did not have a top-level node?") $ viaNonEmpty head $ XML.children x)
     x -> error $ show x
 
-parseWorld :: Error Text :> es => Map ByteString (Map Int [XML.Node]) -> Eff es ()
+parseWorld :: (Breadcrumbs :> es, IOE :> es, Error Text :> es) => Map ByteString (Map Int [XML.Node]) -> Eff es ()
 parseWorld m = do
+  let lookupOrThrow n = case n `M.lookup` m of
+        Nothing -> throwError $ "Could not find node " <> show n
+        Just r -> pure $ M.map toItemMap r
+      parseItems n f = do
+        r <- lookupOrThrow n
+        collection <- mapM (flip (evalStateLocal @NodeMap) f) r
+        let logStr = "Finished parsing" <> show n <> " with a total of " <> show (M.size collection) <> " things"
+        addAnnotation logStr
+        print logStr
+        pure collection
   altName <- asText =<< getGlobalNode "altname" m
   name <- asText =<< getGlobalNode "name" m
+  regions <- parseItems "regions" parseRegion
   seq m pass
-
-asText :: XML.Node -> Eff es Text
-asText = error ""
 
 getGlobalNode :: Error Text :> es => ByteString -> Map ByteString (Map Int [XML.Node]) -> Eff es XML.Node
 getGlobalNode n m = case M.lookup n m >>= M.lookup 0 >>= viaNonEmpty head of
-  Nothing -> throwError $ "Could not find global node " <> show n
+  Nothing -> throwError $ "Could not find global node " <> show n <> show (M.lookup n m)
   Just r -> pure r
 
 buildIntermediateWorldRep :: XML.Node -> XML.Node -> Either Text (Map ByteString (Map Int [XML.Node]))
@@ -62,9 +68,9 @@ buildIntermediateWorldRep vanilla plus =
               , "historical_event_relationships"
               , "historical_event_relationship_supplements"
               ]
-          then pure (XML.name childNode, M.singleton 0 (XML.children childNode))
+          then pure (XML.name childNode, M.singleton 0 [childNode])
           else do
-            byIds <- mapM getIdFromNode $ XML.children childNode
+            byIds <- mapM eitherNodeId $ XML.children childNode
             pure (XML.name childNode, M.fromList byIds) ) (XML.children n)
   in do
     -- the children of vmap/pmap are the artifacts, dance_forms, etc.
@@ -72,23 +78,7 @@ buildIntermediateWorldRep vanilla plus =
     p <- M.fromList <$> nodeToIdMap plus
     pure $ M.unionWith (M.unionWith (<>)) v p
 
-eitherNodeText :: XML.Node -> Either Text Text
-eitherNodeText r = case XML.contents r of
-  [XML.Text t] -> pure (decodeUtf8 t)
-  v -> Left $ "Expected a text node but instead got " <> show v
-
-eitherNodeInt :: XML.Node -> Either Text Int
-eitherNodeInt n = do
-  t <- eitherNodeText n
-  first toText $ parseOnly (signed decimal) t
-
-getIdFromNode :: XML.Node -> Either Text (Int, [XML.Node])
-getIdFromNode n = do
-  let c' = XML.children n
-  idNode <- maybe (Left $ "could not find an id node for " <> show n) Right $ find (\c -> XML.name c == "id") c'
-  idNum <- eitherNodeInt idNode
-  pure (idNum, c')
-
+{-}
 parseDom :: (State (Set Text) :> es) => XML.Node -> Eff es () -- [XML.Node]
 parseDom root = withExpectedNode' "df_world" root $ do
   let pairs = nodeChildrenToMap root
@@ -102,7 +92,7 @@ parseDom root = withExpectedNode' "df_world" root $ do
 
   -- insert verification that indeed we are on the top node..
   --map (\n -> parseWorldItem (decodeUtf8 $ XML.name n) n) (XML.children root)
-{-}
+
 data WorldItem
 parseWorldItem :: Text -> XML.Node -> WorldItem
 parseWorldItem = \case
