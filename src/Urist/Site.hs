@@ -59,22 +59,33 @@ parseSite = do
   siteType <- takeNodeAsReadable "type"
   coords <- asCoord =<< takeNodeAsText "coords"
   --rectangle <- asRectangle =<< takeNodeAsText "rectangle"
-  --n <- get @NodeMap
 
-
-  --if siteId == SiteId 102 then error (show n) else pass
-  structureNode <- takeNodeMaybe "structures"
-  structures <- maybe EM.empty (listToEnumMap localStructureId) <$> (pure structureNode) `forMM` asNamedChildren "structure" takeStructure
+  structuresNode <- consolidateNodes =<< takeNodesMaybe "structures"
+  structures <- EM.mapMaybe id <$> mapM (takeNodeMapAs "structure" takeStructure) structuresNode
+  --traceShow structures pass
      -- maybe (pure EM.empty)
       --  (fmap (EM.fromList . map (toFst localStructureId)) . forEachNamedChild "structure" parseStructure)
   --siteProperties <- getNodeMaybe "site_properties" m >>=
   --  maybe (pure EM.empty)
   --  (fmap (EM.fromList . map (toFst sitePropertyId)) . forEachNamedChild "site_property" parseSiteProperty)
-  _ <- takeNodeAsText "civ_id"
-  _ <- takeNodeAsText "rectangle"
-  _ <- takeNode "site_properties"
-  _ <- takeNodeAsText "cur_owner_id"
+  --_ <- takeNodeAsText "civ_id"
+  --_ <- takeNodeAsText "rectangle"
+  --_ <- takeNode "site_properties"
+  --_ <- takeNodeAsText "cur_owner_id"
   pure $ Site { siteId, name, siteType, coords, structures }
+
+-- | the idea is that we have 2 multiple identically named nodes in the list (one from each xml)
+-- , which we need to combine into just 1
+-- nodemap. but this applies just as well for more than 2 if I want to generalise this later
+consolidateNodes :: (Error Text :> es) => [XML.Node] -> Eff es (EM.EnumMap LocalStructureId NodeMap)
+consolidateNodes xs = do
+  let r = foldl' (\x n -> x <> XML.children n) [] xs
+      eithers = mapM (\x -> case eitherNodeId "id" x of
+        Left v -> first (v<>) $ eitherNodeId "local_id" x
+        Right x' -> Right x') r
+  byIds <- throwEither eithers
+  let idMap = map (bimap LocalStructureId toItemMap) byIds
+  pure (EM.fromListWith (<>) idMap)
 
 asRectangle :: Text -> Eff es Rectangle
 asRectangle = const $ error ""

@@ -30,10 +30,10 @@ eitherNodeText r = case XML.contents r of
 eitherNodeInt :: XML.Node -> Either Text Int
 eitherNodeInt = eitherNodeText >=> eitherParseInt
 
-eitherNodeId :: XML.Node -> Either Text (Int, [XML.Node])
-eitherNodeId n = do
+eitherNodeId :: ByteString -> XML.Node -> Either Text (Int, [XML.Node])
+eitherNodeId idName n = do
   let c' = XML.children n
-  idNode <- maybe (Left $ "could not find an id node for " <> show n) Right $ find (\c -> XML.name c == "id") c'
+  idNode <- maybe (Left $ "could not find an id node for " <> show n) Right $ find (\c -> XML.name c == idName) c'
   idNum <- eitherNodeInt idNode
   pure (idNum, c')
 
@@ -81,12 +81,7 @@ takeNodeMaybeAsReadable :: (Read a, Error Text :> es, State NodeMap :> es) => By
 takeNodeMaybeAsReadable = (takeNodeMaybeAsText >==>) =<< asReadable . decodeUtf8
 
 takeNodeMaybe :: (Error Text :> es, State NodeMap :> es) => ByteString -> Eff es (Maybe XML.Node)
-takeNodeMaybe b = do
-  when (b == "structures") $ do
-    traceShow b pass
-    s <- get
-    traceShow s pass
-  fmap rightToMaybe . tryError . takeNode $ b
+takeNodeMaybe = fmap rightToMaybe . tryError . takeNode
 
 takeNode :: (Error Text :> es, State NodeMap :> es) => ByteString -> Eff es XML.Node
 takeNode = takeXmlItem >=> \case
@@ -102,13 +97,17 @@ takeNodes n = takeNodesMaybe n >>= \case
   [] -> throwError $ "Expected 1 or more nodes but found none" <> show n
   (x:xs) -> pure $ x :| xs
 
-takeNodesMaybe :: (Error Text :> es, State NodeMap :> es) => ByteString -> Eff es [XML.Node]
-takeNodesMaybe = takeXmlItem >=> \case
-  XMLItem (Left x) -> pure [x]
-  XMLItem (Right xs) -> pure xs
+takeNodesMaybe :: (State NodeMap :> es) => ByteString -> Eff es [XML.Node]
+takeNodesMaybe = takeXmlItemMaybe >=> \case
+  Nothing -> pure []
+  Just (XMLItem (Left x)) -> pure [x]
+  Just (XMLItem (Right xs)) -> pure xs
 
 takeNodesMaybeAsInt :: (Error Text :> es, State NodeMap :> es) => ByteString -> Eff es [Int]
 takeNodesMaybeAsInt = takeNodesMaybe >=> mapM asInt
+
+takeXmlItemMaybe :: (State NodeMap :> es) => ByteString -> Eff es (Maybe XMLItem)
+takeXmlItemMaybe k = simple %%= M.updateLookupWithKey (\_ _ -> Nothing) k
 
 takeXmlItem :: (Error Text :> es, State NodeMap :> es) => ByteString -> Eff es XMLItem
 takeXmlItem k = simple %%= M.updateLookupWithKey (\_ _ -> Nothing) k >>= throwMaybe ("Could not find node by name: " <> show k)
@@ -143,8 +142,7 @@ listToEnumMap = (EM.fromList .) . map . toFst
 
 asNamedChildren :: (State (Set Text) :> es, Error Text :> es) => ByteString -> Eff (State NodeMap : es) a -> XML.Node -> Eff es [a]
 asNamedChildren bs f n =
-  fmap catMaybes $ forM (XML.children n) $ \c -> do
-    traceShow c pass
+  fmap catMaybes $ forM (XML.children n) $ \c ->
     if XML.name c == bs then takeNodeMapAs bs (raise f) (toItemMap (XML.children c)) else throwError $
       "Expected a node named " <> show bs <> " and it was named " <> show (XML.name c)
 

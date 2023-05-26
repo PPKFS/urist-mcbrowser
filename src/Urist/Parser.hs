@@ -46,7 +46,6 @@ parseWorld m = do
           => ByteString -> Eff (Error Text : State NodeMap : Concurrent : es) a -> Eff es (Map Int a)
         parseItems n f = do
           r <- lookupOrThrow n
-          traceShow (L.head . M.elems $ r) pass
           collection <- M.mapMaybe id <$> (runConcurrent $ mapConcurrently (takeNodeMapAs n f) r)
           let logStr = "Finished parsing" <> show n <> " with a total of " <> show (M.size collection) <> " things"
           addAnnotation logStr
@@ -84,7 +83,7 @@ buildIntermediateWorldRep vanilla plus =
               ]
           then pure (XML.name childNode, M.singleton 0 [childNode])
           else do
-            byIds <- mapM eitherNodeId $ XML.children childNode
+            byIds <- mapM (eitherNodeId "id") $ XML.children childNode
             pure (XML.name childNode, M.fromList byIds) ) (XML.children n)
   in do
     -- the children of vmap/pmap are the artifacts, dance_forms, etc.

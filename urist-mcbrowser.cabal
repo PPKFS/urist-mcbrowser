@@ -23,6 +23,7 @@ common common-options
     , solitude
     , breadcrumbs
     , containers
+    , effectful
     , effectful-core
     , effectful-plugin
     , effectful-th
@@ -63,9 +64,9 @@ library
     Urist.Parser
     Urist.Region
     Urist.UndergroundRegion
-    --Urist.Site
+    Urist.Site
     Urist.ParseHelpers
-    --Urist.Structure
+    Urist.Structure
     --Urist.HistoricalFigure
     Urist.Id
     --Urist.Artifact

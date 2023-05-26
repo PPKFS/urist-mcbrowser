@@ -13,12 +13,15 @@ data StructureType =
   | InnTavern
   | Keep
   | Library LibraryContents
-  | Temple HistoricalFigureId
+  | Temple DevotedTo
   | Tomb
   | Tower
   | UnderworldSpire
   | Dungeon DungeonType
   | CountingHouse
+  deriving stock (Show, Read, Ord, Eq, Generic)
+
+data DevotedTo = ReligionDevotion EntityId | DeityDevotion HistoricalFigureId
   deriving stock (Show, Read, Ord, Eq, Generic)
 
 data DungeonType = Catacombs | Sewers
@@ -45,13 +48,17 @@ isDungeon _ = False
 
 takeStructure :: (Error Text :> es, State NodeMap :> es) => Eff es Structure
 takeStructure = do
-  localStructureId <- LocalStructureId <$> takeNodeAsInt "local_id"
+  localStructureId <- LocalStructureId <$> do
+    -- of course, vanilla and dfhack give these different names..
+    lid <- takeNodeAsInt "local_id"
+    rid <- takeNodeAsInt "id"
+    if lid /= rid then throwError ("found mismatching ids; " <> show (lid, rid)) else pure lid
   name <- takeNodeAsText "name"
   structureTypeNode <- takeNodeAsText "type"
   structureType <- case structureTypeNode of
     "library" -> takeLibraryContents
     "dungeon" -> takeDungeonSubtype
-    "temple" -> takeWorshipId
+    "temple" -> takeTempleDevotion
     x -> asReadable "structure" x
   entityId <- EntityId <$$> takeNodeMaybeAsInt "entity_id"
   -- mbCopiedArtifactId <- takeNodeMaybeAsInt "copied_artifact_id"
@@ -62,8 +69,23 @@ takeStructure = do
   --  throwError (show localStructureId <> "has a subtype, but is not a dungeon")
   pure $ Structure { localStructureId, name, structureType, entityId }
 
-takeWorshipId :: (Error Text :> es, State NodeMap :> es) => Eff es StructureType
-takeWorshipId = Temple . HistoricalFigureId <$> takeNodeAsInt "worship_hfid"
+-- | If a temple was created independently of a religion (but to a deity), it has a hfid. this is rare
+-- if it was created by a religion, it has an entity_id.
+takeTempleDevotion :: (Error Text :> es, State NodeMap :> es) => Eff es StructureType
+takeTempleDevotion = do
+  -- vanilla is either of these two
+  hfid <- takeNodeMaybeAsInt "worship_hfid"
+  eid <- takeNodeMaybeAsInt "entity_id"
+  -- and it seems in the dfhack file it's very explicitly spelled out, but we've already worked it out
+  -- and these fields are identical to the above, or *should* be..
+  eid' <- takeNodeMaybe "religion"
+  hfid' <- takeNodeMaybe "deity"
+  _ <- takeNodeMaybe "deity_type"
+
+  case (hfid, eid) of
+    (Just hf, Nothing) -> pure $ Temple . DeityDevotion . HistoricalFigureId $ hf
+    (Nothing, Just e) -> pure $ Temple . ReligionDevotion . EntityId $ e
+    x -> throwError $ "Expected a temple to have either an entity id xor a deity id but found " <> show x
 
 takeDungeonSubtype :: (Error Text :> es, State NodeMap :> es) => Eff es StructureType
 takeDungeonSubtype = Dungeon <$> takeNodeAsReadable "subtype"
