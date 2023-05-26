@@ -10,6 +10,8 @@ import qualified Data.Text as T
 import Data.Char (toUpper)
 import qualified Data.Set as S
 import Urist.Id
+import qualified Data.EnumMap as EM
+import qualified Data.Traversable as Trav
 
 newtype XMLItem = XMLItem (Either XML.Node [XML.Node]) deriving newtype (Show)
 type NodeMap = Map ByteString XMLItem
@@ -26,7 +28,7 @@ eitherNodeText r = case XML.contents r of
   v -> Left $ "Expected a text node but instead got " <> show v
 
 eitherNodeInt :: XML.Node -> Either Text Int
-eitherNodeInt = eitherNodeText >=> first toText . parseOnly (signed decimal)
+eitherNodeInt = eitherNodeText >=> eitherParseInt
 
 eitherNodeId :: XML.Node -> Either Text (Int, [XML.Node])
 eitherNodeId n = do
@@ -46,6 +48,9 @@ asText = either throwError pure . eitherNodeText
 
 takeNodeAsText :: (Error Text :> es, State NodeMap :> es) => ByteString -> Eff es Text
 takeNodeAsText = takeNode >=> asText
+
+takeNodeMaybeAsText :: (Error Text :> es, State NodeMap :> es) => ByteString -> Eff es (Maybe Text)
+takeNodeMaybeAsText = takeNodeMaybe >==> asText
 
 takeId :: (Error Text :> es, State NodeMap :> es) => (Int -> a) -> Eff es a
 takeId = flip fmap (asInt =<< takeNode "id")
@@ -72,20 +77,79 @@ asReadable n t = throwMaybe ("Unknown " <> n <> " type: " <> toText t) . readMay
 takeNodeAsReadable :: (Read a, Error Text :> es, State NodeMap :> es) => ByteString -> Eff es a
 takeNodeAsReadable = liftA2 (>>=) takeNodeAsText (asReadable . decodeUtf8)
 
+takeNodeMaybeAsReadable :: (Read a, Error Text :> es, State NodeMap :> es) => ByteString -> Eff es (Maybe a)
+takeNodeMaybeAsReadable = (takeNodeMaybeAsText >==>) =<< asReadable . decodeUtf8
+
 takeNodeMaybe :: (Error Text :> es, State NodeMap :> es) => ByteString -> Eff es (Maybe XML.Node)
-takeNodeMaybe = fmap rightToMaybe . tryError . takeNode
+takeNodeMaybe b = do
+  when (b == "structures") $ do
+    traceShow b pass
+    s <- get
+    traceShow s pass
+  fmap rightToMaybe . tryError . takeNode $ b
 
 takeNode :: (Error Text :> es, State NodeMap :> es) => ByteString -> Eff es XML.Node
 takeNode = takeXmlItem >=> \case
   XMLItem (Left x) -> pure x
   XMLItem (Right [x]) -> pure x
   XMLItem (Right []) -> throwError "Found no nodes at all. Impossible?"
-  XMLItem (Right (x:_)) -> case XML.name x of
+  XMLItem (Right l@(x:_)) -> case XML.name x of
     "id" -> pure x
-    other -> throwError $ "Found multiple matching nodes when expecting 1: " <> show other
+    other -> error $ "Found multiple matching nodes when expecting 1: " <> show other <> show l <> show (length l)
+
+takeNodes :: (Error Text :> es, State NodeMap :> es) => ByteString -> Eff es (NonEmpty XML.Node)
+takeNodes n = takeNodesMaybe n >>= \case
+  [] -> throwError $ "Expected 1 or more nodes but found none" <> show n
+  (x:xs) -> pure $ x :| xs
+
+takeNodesMaybe :: (Error Text :> es, State NodeMap :> es) => ByteString -> Eff es [XML.Node]
+takeNodesMaybe = takeXmlItem >=> \case
+  XMLItem (Left x) -> pure [x]
+  XMLItem (Right xs) -> pure xs
+
+takeNodesMaybeAsInt :: (Error Text :> es, State NodeMap :> es) => ByteString -> Eff es [Int]
+takeNodesMaybeAsInt = takeNodesMaybe >=> mapM asInt
 
 takeXmlItem :: (Error Text :> es, State NodeMap :> es) => ByteString -> Eff es XMLItem
 takeXmlItem k = simple %%= M.updateLookupWithKey (\_ _ -> Nothing) k >>= throwMaybe ("Could not find node by name: " <> show k)
 
-asCoordList :: Text -> Eff es (S.Set Coord)
-asCoordList = mapM (mapM (throwError . first toText . parseOnly (signed decimal)) . T.split (==',')) .  T.split (=='|')
+eitherParseInt :: Text -> Either Text Int
+eitherParseInt = first toText . parseOnly (signed decimal)
+
+parseInt :: (Error Text :> es) => Text -> Eff es Int
+parseInt = throwEither . eitherParseInt
+
+asCoordList :: (Error Text :> es) => Text -> Eff es (S.Set Coord)
+asCoordList = fmap S.fromList . mapM asCoord . T.split (=='|') . T.init
+
+asCoord :: (Error Text :> es) => Text -> Eff es Coord
+asCoord input = case T.split (==',') input of
+  [x, y] -> (,) <$> parseInt x <*> parseInt y
+  x -> throwError $ "expected a coordinate but got " <> show x
+
+takeNodeMapAs :: (State (Set Text) :> es) => ByteString -> Eff (Error Text : State NodeMap : es) a -> NodeMap -> Eff es (Maybe a)
+takeNodeMapAs n f = flip evalStateLocal $ do
+  res <- runError $ do
+    p <- f
+    s <- get
+    when (M.size s > 0) $ throwError $ "When parsing " <> show n <> " the following elements weren't used: " <> show (M.keys s)
+    pure p
+  case res of
+    Left (_callStack, e) -> modify (S.insert e) >> pure Nothing
+    Right r' -> pure $ Just r'
+
+listToEnumMap :: Enum b => (a -> b) -> [a] -> EM.EnumMap b a
+listToEnumMap = (EM.fromList .) . map . toFst
+
+asNamedChildren :: (State (Set Text) :> es, Error Text :> es) => ByteString -> Eff (State NodeMap : es) a -> XML.Node -> Eff es [a]
+asNamedChildren bs f n =
+  fmap catMaybes $ forM (XML.children n) $ \c -> do
+    traceShow c pass
+    if XML.name c == bs then takeNodeMapAs bs (raise f) (toItemMap (XML.children c)) else throwError $
+      "Expected a node named " <> show bs <> " and it was named " <> show (XML.name c)
+
+mapMM :: (Traversable t, Monad m) => (a -> m b) -> m (t a) -> m (t b)
+mapMM f mxs = Trav.mapM f =<< mxs
+
+forMM :: (Traversable t, Monad m) => m (t a) -> (a -> m b) -> m (t b)
+forMM = flip mapMM

@@ -5,10 +5,10 @@ import Effectful.Error.Static
 import qualified Xeno.DOM as XML
 import Urist.ParseHelpers
 import qualified Data.EnumMap as EM
-import Data.Attoparsec.Text
 import Urist.Structure
-import Urist.HistoricalFigure
 import Urist.Id
+import qualified Data.Map as M
+import qualified Data.Traversable as Trav
 
 data SiteType =
   Hillocks
@@ -51,22 +51,34 @@ data Site = Site
   , siteProperties :: EM.EnumMap SitePropertyId SiteProperty
   } deriving stock (Show)
 
-parseSite :: (Error Text :> es) => Map ByteString XML.Node -> Eff es Site
-parseSite m = do
-  expectOnly ["id", "type", "name", "coords", "rectangle", "structures", "site_properties"] m
-  siteId <- parseId SiteId m
-  name <- parseName m
-  siteType <- parseType "site" m
-  coords <- getNodeText "coords" m >>= parseCoords
-  rectangle <- getNodeText "rectangle" m >>= parseRectangle
-  structures <- getNodeMaybe "structures" m >>=
-    maybe (pure EM.empty)
-      (fmap (EM.fromList . map (toFst localStructureId)) . forEachNamedChild "structure" parseStructure)
-  siteProperties <- getNodeMaybe "site_properties" m >>=
-    maybe (pure EM.empty)
-    (fmap (EM.fromList . map (toFst sitePropertyId)) . forEachNamedChild "site_property" parseSiteProperty)
-  pure $ Site { siteId, name, siteType, coords, rectangle, structures, siteProperties }
+parseSite :: (Error Text :> es, State (Set Text) :> es, State NodeMap :> es) => Eff es Site
+parseSite = do
+  n <- gets M.keys
+  siteId <- takeId SiteId
+  name <- takeNodeAsText "name"
+  siteType <- takeNodeAsReadable "type"
+  coords <- asCoord =<< takeNodeAsText "coords"
+  --rectangle <- asRectangle =<< takeNodeAsText "rectangle"
+  --n <- get @NodeMap
 
+
+  --if siteId == SiteId 102 then error (show n) else pass
+  structureNode <- takeNodeMaybe "structures"
+  structures <- maybe EM.empty (listToEnumMap localStructureId) <$> (pure structureNode) `forMM` asNamedChildren "structure" takeStructure
+     -- maybe (pure EM.empty)
+      --  (fmap (EM.fromList . map (toFst localStructureId)) . forEachNamedChild "structure" parseStructure)
+  --siteProperties <- getNodeMaybe "site_properties" m >>=
+  --  maybe (pure EM.empty)
+  --  (fmap (EM.fromList . map (toFst sitePropertyId)) . forEachNamedChild "site_property" parseSiteProperty)
+  _ <- takeNodeAsText "civ_id"
+  _ <- takeNodeAsText "rectangle"
+  _ <- takeNode "site_properties"
+  _ <- takeNodeAsText "cur_owner_id"
+  pure $ Site { siteId, name, siteType, coords, structures }
+
+asRectangle :: Text -> Eff es Rectangle
+asRectangle = const $ error ""
+{-}
 parseSiteProperty :: (Error Text :> es) => XML.Node -> Eff es SiteProperty
 parseSiteProperty n = do
   let m = nodeChildrenToMap n
@@ -77,14 +89,7 @@ parseSiteProperty n = do
   ownerId <- HistoricalFigureId <$$> getNodeIntMaybe "owner_hfid" m
   structureId <- LocalStructureId <$$> getNodeIntMaybe "structure_id" m
   pure $ SiteProperty { sitePropertyId, sitePropertyType, ownerId, structureId }
-
-parseCoords :: (Error Text :> es) => Text -> Eff es Coord
-parseCoords = biParseM' "," tryParseInt
-
+=
 parseRectangle :: (Error Text :> es) => Text -> Eff es Rectangle
 parseRectangle = biParseM' ":" parseCoords
-
-tryParseInt :: (Error Text :> es) => Text -> Eff es Int
-tryParseInt t = case parseOnly (signed decimal) t of
-    Left err -> throwError $ toText err
-    Right i -> pure i
+-}

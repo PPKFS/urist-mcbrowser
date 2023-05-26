@@ -1,11 +1,9 @@
 module Urist.Structure where
 
-
 import Solitude
 import Effectful.Error.Static
 import qualified Xeno.DOM as XML
 import Urist.ParseHelpers
-import Urist.HistoricalFigure
 import Urist.Id
 
 data StructureType =
@@ -15,7 +13,7 @@ data StructureType =
   | InnTavern
   | Keep
   | Library LibraryContents
-  | Temple
+  | Temple HistoricalFigureId
   | Tomb
   | Tower
   | UnderworldSpire
@@ -25,6 +23,7 @@ data StructureType =
 
 data DungeonType = Catacombs | Sewers
   deriving stock (Show, Read, Ord, Eq, Generic)
+
 newtype LibraryContents = LibraryContents { copiedArtifacts :: [ArtifactId] }
   deriving newtype (Read, Show, Ord, Eq)
   deriving stock (Generic)
@@ -34,7 +33,6 @@ data Structure = Structure
   , structureType :: StructureType
   , name :: Text
   , entityId :: Maybe EntityId
-  , worshipId :: Maybe HistoricalFigureId
   } deriving stock (Show)
 
 isLibrary :: StructureType -> Bool
@@ -45,31 +43,30 @@ isDungeon :: StructureType -> Bool
 isDungeon (Dungeon _) = True
 isDungeon _ = False
 
-parseStructure :: (Error Text :> es) => XML.Node -> Eff es Structure
-parseStructure n = do
-  let m = nodeChildrenToMap n
-  expectOnly ["local_id", "type", "name", "entity_id", "worship_hfid", "copied_artifact_id", "subtype"] m
-  localStructureId <- LocalStructureId <$> getNodeInt "local_id" m
-  name <- parseName m
-  structureTypeNode <- getNodeText "type" m
+takeStructure :: (Error Text :> es, State NodeMap :> es) => Eff es Structure
+takeStructure = do
+  localStructureId <- LocalStructureId <$> takeNodeAsInt "local_id"
+  name <- takeNodeAsText "name"
+  structureTypeNode <- takeNodeAsText "type"
   structureType <- case structureTypeNode of
-    "library" -> parseLibraryContents n
-    "dungeon" -> parseDungeonSubtype m
-    x -> readHelper "structure" x
-  entityId <- EntityId <$$> getNodeIntMaybe "entity_id" m
-  worshipId <- HistoricalFigureId <$$> getNodeIntMaybe "worship_hfid" m
-  mbCopiedArtifactId <- getNodeMaybe "copied_artifact_id" m
-  if isJust mbCopiedArtifactId && not (isLibrary structureType)
-    then throwError (show n <> "has copied artifacts, but is not a library") else pass
-  mbSubtype <- getNodeMaybe "subtype" m
-  if isJust mbSubtype && not (isDungeon structureType)
-    then throwError (show n <> "has a subtype, but is not a dungeon") else pass
-  pure $ Structure { localStructureId, name, structureType, entityId, worshipId }
+    "library" -> takeLibraryContents
+    "dungeon" -> takeDungeonSubtype
+    "temple" -> takeWorshipId
+    x -> asReadable "structure" x
+  entityId <- EntityId <$$> takeNodeMaybeAsInt "entity_id"
+  -- mbCopiedArtifactId <- takeNodeMaybeAsInt "copied_artifact_id"
+  -- when (isJust mbCopiedArtifactId && not (isLibrary structureType)) $
+  --   throwError (show localStructureId <> "has copied artifacts, but is not a library")
+  -- mbSubtype <- takeNodeMaybeAsReadable "subtype"
+  -- when (isJust mbSubtype && not (isDungeon structureType)) $
+  --  throwError (show localStructureId <> "has a subtype, but is not a dungeon")
+  pure $ Structure { localStructureId, name, structureType, entityId }
 
-parseDungeonSubtype :: (Error Text :> es) => Map ByteString XML.Node -> Eff es StructureType
-parseDungeonSubtype m = Dungeon <$> (getNodeText "subtype" m >>= readHelper "dungeon subtype")
+takeWorshipId :: (Error Text :> es, State NodeMap :> es) => Eff es StructureType
+takeWorshipId = Temple . HistoricalFigureId <$> takeNodeAsInt "worship_hfid"
 
-parseLibraryContents :: (Error Text :> es) => XML.Node -> Eff es StructureType
-parseLibraryContents n = do
-  copiedArtifactIds <- map ArtifactId <$> parseMany "copied_artifact_id" (getNodeInt "copied_artifact_id") n
-  pure $ Library (LibraryContents copiedArtifactIds)
+takeDungeonSubtype :: (Error Text :> es, State NodeMap :> es) => Eff es StructureType
+takeDungeonSubtype = Dungeon <$> takeNodeAsReadable "subtype"
+
+takeLibraryContents :: (Error Text :> es, State NodeMap :> es) => Eff es StructureType
+takeLibraryContents = Library . LibraryContents . map ArtifactId <$> takeNodesMaybeAsInt "copied_artifact_id"

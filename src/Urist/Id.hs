@@ -31,7 +31,7 @@ newtype WrittenContentId = WrittenContentId Int
   deriving stock (Generic)
 
 newtype HistoricalFigureId = HistoricalFigureId Int
-  deriving newtype (Show, Ord, Eq, Num, Bounded, Enum)
+  deriving newtype (Show, Read, Ord, Eq, Num, Bounded, Enum)
   deriving stock (Generic)
 
 newtype WorldConstructionId = WorldConstructionId Int

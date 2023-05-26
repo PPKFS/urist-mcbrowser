@@ -41,5 +41,5 @@ parseRegion = do
   regionType <- takeNodeAsReadable "type"
   forceId <- ForceId <$$> takeNodeMaybeAsInt "force_id"
   evilness <- takeNodeAsReadable "evilness"
-  coords <- asCoordList =<< takeNodeText "coords"
+  coords <- asCoordList =<< takeNodeAsText "coords"
   pure $ Region { regionId, name, regionType, forceId, evilness, coords }

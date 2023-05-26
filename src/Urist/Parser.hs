@@ -12,6 +12,9 @@ import Urist.ParseHelpers
 import Effectful.Error.Static
 import Urist.UndergroundRegion
 import qualified Data.Set as S
+import Urist.Site
+import Effectful.Concurrent.Async
+import qualified GHC.List as L
 
 data DfWorld
 
@@ -34,36 +37,29 @@ parse fp fp2 = withSpan' "XML parsing" "df_world" $ do
 
 parseWorld :: (Breadcrumbs :> es, IOE :> es, Error Text :> es) => Map ByteString (Map Int [XML.Node]) -> Eff es ()
 parseWorld m = do
-  res <- runStateLocal (S.empty @Text) $ do
+  res <- runStateShared (S.empty @Text) $ do
     let lookupOrThrow :: (Error Text :> es) => ByteString -> Eff es (Map Int NodeMap)
         lookupOrThrow n = case n `M.lookup` m of
           Nothing -> throwError $ "Could not find node " <> show n
           Just r -> pure $ M.map toItemMap r
         parseItems :: (Breadcrumbs :> es, IOE :> es, State (Set Text) :> es, Error Text :> es)
-          => ByteString -> Eff (Error Text : State NodeMap : es) a -> Eff es (Map Int a)
+          => ByteString -> Eff (Error Text : State NodeMap : Concurrent : es) a -> Eff es (Map Int a)
         parseItems n f = do
           r <- lookupOrThrow n
-          collection <- M.mapMaybe id <$> mapM (flip (evalStateLocal @NodeMap) (do
-            res <- runError $ do
-              p <- f
-              s <- get
-              when (M.size s > 0) $ throwError $ "When parsing " <> show n <> " the following elements weren't used: " <> show (M.keys s)
-              pure p
-            case res of
-              Left (_callStack, e) -> modify (S.insert e) >> pure Nothing
-              Right r' -> pure $ Just r')) r
+          traceShow (L.head . M.elems $ r) pass
+          collection <- M.mapMaybe id <$> (runConcurrent $ mapConcurrently (takeNodeMapAs n f) r)
           let logStr = "Finished parsing" <> show n <> " with a total of " <> show (M.size collection) <> " things"
           addAnnotation logStr
           print logStr
           pure collection
     altName <- asText =<< getGlobalNode "altname" m
     name <- asText =<< getGlobalNode "name" m
-    regions <- parseItems "regions" parseRegion
-    undergroundRegions <- parseItems "underground_regions" parseUndergroundRegion
+    --regions <- parseItems "regions" parseRegion
+    --undergroundRegions <- parseItems "underground_regions" parseUndergroundRegion
+    sites <- parseItems "sites" parseSite
     seq m pass
   case res of
     (_, errs) -> mapM_ print errs
-
 
 getGlobalNode :: Error Text :> es => ByteString -> Map ByteString (Map Int [XML.Node]) -> Eff es XML.Node
 getGlobalNode n m = case M.lookup n m >>= M.lookup 0 >>= viaNonEmpty head of
@@ -129,7 +125,3 @@ parseWorldItem = \case
  x -> failOnUnknownNodeType x
  "written_conte
 -}
-
-
-failOnUnknownNodeType :: Text -> XML.Node -> XML.Node
-failOnUnknownNodeType x = const (error $ "could not parse node type " <> x)
