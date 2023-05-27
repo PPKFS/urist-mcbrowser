@@ -15,6 +15,23 @@ import qualified Data.Set as S
 import Urist.Site
 import Effectful.Concurrent.Async
 import qualified GHC.List as L
+import Urist.Landmass
+import Urist.Identity
+import Urist.Artifact
+import Urist.DanceForm
+import Urist.PoeticForm
+import Urist.MusicalForm
+import Urist.Entity
+import Urist.EntityPopulation
+import Urist.HistoricalEra
+import Urist.HistoricalEventCollection
+import Urist.HistoricalEventRelationshipSupplement
+import Urist.HistoricalEventRelationship
+import Urist.HistoricalEvent
+import Urist.HistoricalFigure
+import Urist.River
+import Urist.WorldConstruction
+import Urist.WrittenContent
 
 data DfWorld
 
@@ -43,10 +60,10 @@ parseWorld m = do
           Nothing -> throwError $ "Could not find node " <> show n
           Just r -> pure $ M.map toItemMap r
         parseItems :: (Breadcrumbs :> es, IOE :> es, State (Set Text) :> es, Error Text :> es)
-          => ByteString -> Eff (Error Text : State NodeMap : Concurrent : es) a -> Eff es (Map Int a)
+          => ByteString -> Eff (Error Text : State NodeMap : {- Concurrent :-} es) a -> Eff es (Map Int a)
         parseItems n f = do
           r <- lookupOrThrow n
-          collection <- M.mapMaybe id <$> (runConcurrent $ mapConcurrently (takeNodeMapAs n f) r)
+          collection <- M.mapMaybe id <$> mapM {- runConcurrent $ mapConcurrently -} (takeNodeMapAs n f) r
           let logStr = "Finished parsing" <> show n <> " with a total of " <> show (M.size collection) <> " things"
           addAnnotation logStr
           print logStr
@@ -55,7 +72,26 @@ parseWorld m = do
     name <- asText =<< getGlobalNode "name" m
     --regions <- parseItems "regions" parseRegion
     --undergroundRegions <- parseItems "underground_regions" parseUndergroundRegion
-    sites <- parseItems "sites" parseSite
+    --sites <- parseItems "sites" parseSite
+    --landmasses <- parseItems "landmasses" parseLandmass
+
+    identities <- parseItems "identities" parseIdentity
+    artifacts <- parseItems "artifacts" parseArtifact
+    danceForms <- parseItems "dance_forms" parseDanceForm
+    poeticForms <- parseItems "poetic_forms" parsePoeticForm
+    musicalForms <- parseItems "musical_forms" parseMusicalForm
+    entities <- parseItems "entities" parseEntity
+    entityPopulations <- parseItems "entity_populations" parseEntityPopulation
+    historicalEras <- parseItems "historical_eras" parseHistoricalEra
+    historicalEventCollections <- parseItems "historical_event_collections" parseHistoricalEventCollection
+    historicalEventRelationshipSupplements <- parseItems "historical_event_relationship_supplements" parseHistoricalEventRelationshipSupplement
+    historicalEventRelationships <- parseItems "historical_event_relationships" parseHistoricalEventRelationship
+    historicalEvents <- parseItems "historical_events" parseHistoricalEvent
+    historicalFigures <- parseItems "historical_figures" parseHistoricalFigure
+    rivers <- parseItems "rivers" parseRiver
+    worldConstructions <- parseItems "world_constructions" parseWorldConstruction
+    writtenContents <- parseItems "written_contents" parseWrittenContent
+    print (M.keys m)
     seq m pass
   case res of
     (_, errs) -> mapM_ print errs

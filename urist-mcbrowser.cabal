@@ -67,9 +67,24 @@ library
     Urist.Site
     Urist.ParseHelpers
     Urist.Structure
-    --Urist.HistoricalFigure
+    Urist.Landmass
     Urist.Id
-    --Urist.Artifact
+    Urist.Identity
+    Urist.Artifact
+    Urist.DanceForm
+    Urist.PoeticForm
+    Urist.MusicalForm
+    Urist.Entity
+    Urist.EntityPopulation
+    Urist.HistoricalEra
+    Urist.HistoricalEventCollection
+    Urist.HistoricalEventRelationshipSupplement
+    Urist.HistoricalEventRelationship
+    Urist.HistoricalEvent
+    Urist.HistoricalFigure
+    Urist.River
+    Urist.WorldConstruction
+    Urist.WrittenContent
 
 test-suite urist-mcbrowser-test
   import:             common-options

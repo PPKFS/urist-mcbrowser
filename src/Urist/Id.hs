@@ -42,4 +42,19 @@ newtype ForceId = ForceId Int
   deriving newtype (Show, Ord, Eq, Num, Bounded, Enum)
   deriving stock (Generic)
 
+newtype CivilisationId = CivilisationId Int
+  deriving newtype (Show, Ord, Eq, Num, Bounded, Enum)
+  deriving stock (Generic)
+
+newtype LandmassId = LandmassId Int
+  deriving newtype (Show, Ord, Eq, Num, Bounded, Enum)
+  deriving stock (Generic)
+
 type Coord = (Int, Int)
+
+type Rectangle = (Coord, Coord)
+
+data Name = Name
+  { name :: Maybe Text
+  , translatedName :: Text
+  } deriving stock (Eq, Show, Read, Ord, Generic)

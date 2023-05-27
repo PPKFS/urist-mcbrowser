@@ -29,6 +29,12 @@ data SubregionLocation = SubregionLocation
   } deriving stock (Show)
 
 data Artifact = Artifact
+
+parseArtifact :: (Error Text :> es, State NodeMap :> es) => Eff es Artifact
+parseArtifact = pure Artifact
+
+{- }
+data Artifact = Artifact
   { artifactId :: ArtifactId
   , name :: Text
   , item :: Item
@@ -92,3 +98,4 @@ parseItem n =  do
   writtenContentId <- WrittenContentId <$$> coalesceNodeIntMaybe ["page_written_content_id", "writing_written_content_id"] m
   let writtenContent = ItemWrittenContent <$> writtenContentId <*> Just pageNumber
   pure $ Item { name, writtenContent }
+-}

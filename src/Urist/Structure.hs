@@ -4,6 +4,7 @@ import Solitude
 import Effectful.Error.Static
 import Urist.ParseHelpers
 import Urist.Id
+import qualified Data.EnumSet as ES
 
 data StructureType =
   MeadHall
@@ -33,8 +34,8 @@ newtype LibraryContents = LibraryContents { copiedArtifacts :: [ArtifactId] }
 data Structure = Structure
   { localStructureId :: LocalStructureId
   , structureType :: StructureType
-  , name :: Text
-  , entityId :: Maybe EntityId
+  , name :: Name
+  , inhabitants :: ES.EnumSet HistoricalFigureId
   } deriving stock (Show)
 
 isLibrary :: StructureType -> Bool
@@ -52,21 +53,18 @@ takeStructure = do
     lid <- takeNodeAsInt "local_id"
     rid <- takeNodeAsInt "id"
     if lid /= rid then throwError ("found mismatching ids; " <> show (lid, rid)) else pure lid
-  name <- takeNodeAsText "name"
+  name1 <- takeNodeAsText "name"
+  name2 <- takeNodeAsText "name2"
+  let name = Name (Just name2) name1
+
   structureTypeNode <- takeNodeAsText "type"
   structureType <- case structureTypeNode of
     "library" -> takeLibraryContents
     "dungeon" -> takeDungeonSubtype
     "temple" -> takeTempleDevotion
     x -> asReadable "structure" x
-  entityId <- EntityId <$$> takeNodeMaybeAsInt "entity_id"
-  -- mbCopiedArtifactId <- takeNodeMaybeAsInt "copied_artifact_id"
-  -- when (isJust mbCopiedArtifactId && not (isLibrary structureType)) $
-  --   throwError (show localStructureId <> "has copied artifacts, but is not a library")
-  -- mbSubtype <- takeNodeMaybeAsReadable "subtype"
-  -- when (isJust mbSubtype && not (isDungeon structureType)) $
-  --  throwError (show localStructureId <> "has a subtype, but is not a dungeon")
-  pure $ Structure { localStructureId, name, structureType, entityId }
+  inhabitants <- ES.fromList . fmap HistoricalFigureId <$> takeNodesMaybeAsInt "inhabitant"
+  pure $ Structure { localStructureId, name, structureType, inhabitants }
 
 -- | If a temple was created independently of a religion (but to a deity), it has a hfid. this is rare
 -- if it was created by a religion, it has an entity_id.
@@ -83,16 +81,21 @@ takeTempleDevotion = do
   verifyThat
     [ (eid' == eid, "religion (in legends_plus) should be the same as entity_id")
     , (hfid' == hfid, "deity (in legends plus) should be the same as worship_hfid")
-    , (if dt == 0 then isJust hfid' else isJust eid', "")
+    , (if dt == 0 then isJust hfid' else isJust eid', "deity_type=0 should be with only a deity, 1 with a religion")
     ]
-
   case (hfid, eid) of
     (Just hf, Nothing) -> pure $ Temple . DeityDevotion $ hf
     (Nothing, Just e) -> pure $ Temple . ReligionDevotion $ e
     x -> throwError $ "Expected a temple to have either an entity id xor a deity id but found " <> show x
 
 takeDungeonSubtype :: (Error Text :> es, State NodeMap :> es) => Eff es StructureType
-takeDungeonSubtype = Dungeon <$> takeNodeAsReadable "subtype"
+takeDungeonSubtype = do
+  dst <- takeNodeAsReadable "subtype"
+  dungeonType <- takeNodeAsInt "dungeon_type"
+  verifyThat
+    [ (if dungeonType == 1 then dst == Sewers else dst == Catacombs, "dungeon_type=1 is sewers, 2 is catacombs")
+    ]
+  pure $ Dungeon dst
 
 takeLibraryContents :: (Error Text :> es, State NodeMap :> es) => Eff es StructureType
 takeLibraryContents = Library . LibraryContents . map ArtifactId <$> takeNodesMaybeAsInt "copied_artifact_id"

@@ -9,6 +9,7 @@ import Urist.Structure
 import Urist.Id
 import qualified Data.Map as M
 import qualified Data.Traversable as Trav
+import Data.Bitraversable (bimapM)
 
 data SiteType =
   Hillocks
@@ -31,14 +32,12 @@ data SiteType =
   | Vault
   | Cave
   deriving stock (Show, Read, Ord, Eq, Bounded, Enum, Generic)
-type Rectangle = (Coord, Coord)
 
 data SitePropertyType = House deriving stock (Show, Read, Eq)
 data SiteProperty = SiteProperty
   { sitePropertyId :: SitePropertyId
-  , sitePropertyType :: Maybe SitePropertyType
+  , contents :: Either LocalStructureId SitePropertyType
   , ownerId :: Maybe HistoricalFigureId
-  , structureId :: Maybe LocalStructureId
   } deriving stock (Show)
 
 data Site = Site
@@ -48,59 +47,43 @@ data Site = Site
   , coords :: Coord
   , rectangle :: Rectangle
   , structures :: EM.EnumMap LocalStructureId Structure
+  -- this is property (real estate) and not property (characteristic)
   , siteProperties :: EM.EnumMap SitePropertyId SiteProperty
+  , civilisation :: Maybe CivilisationId
+  -- I think this is for a government?
+  , currentOwner :: Maybe EntityId
   } deriving stock (Show)
 
 parseSite :: (Error Text :> es, State (Set Text) :> es, State NodeMap :> es) => Eff es Site
 parseSite = do
-  n <- gets M.keys
   siteId <- takeId SiteId
   name <- takeNodeAsText "name"
   siteType <- takeNodeAsReadable "type"
   coords <- asCoord =<< takeNodeAsText "coords"
-  --rectangle <- asRectangle =<< takeNodeAsText "rectangle"
-
-  structuresNode <- consolidateNodes =<< takeNodesMaybe "structures"
+  rectangle <- asRectangle =<< takeNodeAsText "rectangle"
+  civilisation <- CivilisationId <$$> takeNodeMaybeAsInt "civ_id"
+  currentOwner <- EntityId <$$> takeNodeMaybeAsInt "cur_owner_id"
+  structuresNode <- consolidateNodes LocalStructureId =<< takeNodesMaybe "structures"
+  sitePropertiesNode <- consolidateNodes SitePropertyId =<< takeNodesMaybe "site_properties"
   structures <- EM.mapMaybe id <$> mapM (takeNodeMapAs "structure" takeStructure) structuresNode
-  --traceShow structures pass
-     -- maybe (pure EM.empty)
-      --  (fmap (EM.fromList . map (toFst localStructureId)) . forEachNamedChild "structure" parseStructure)
-  --siteProperties <- getNodeMaybe "site_properties" m >>=
-  --  maybe (pure EM.empty)
-  --  (fmap (EM.fromList . map (toFst sitePropertyId)) . forEachNamedChild "site_property" parseSiteProperty)
-  --_ <- takeNodeAsText "civ_id"
-  --_ <- takeNodeAsText "rectangle"
-  --_ <- takeNode "site_properties"
-  --_ <- takeNodeAsText "cur_owner_id"
-  pure $ Site { siteId, name, siteType, coords, structures }
+  siteProperties <- EM.mapMaybe id <$> mapM (takeNodeMapAs "site_property" takeSiteProperty) sitePropertiesNode
+  pure $ Site { siteId, name, siteType, coords, structures, rectangle, civilisation, currentOwner, siteProperties }
+
+takeSiteProperty :: (Error Text :> es, State NodeMap :> es) => Eff es SiteProperty
+takeSiteProperty = do
+  sitePropertyId <- SitePropertyId <$> takeNodeAsInt "id"
+  contents <- bimapM (LocalStructureId <$$> asInt) (asReadable (show sitePropertyId <> "site property") <=< asText) =<< takeEitherNode "structure_id" "type"
+  ownerId <- HistoricalFigureId <$$> takeNodeMaybeAsInt "owner_hfid"
+  pure $ SiteProperty { sitePropertyId, contents, ownerId }
 
 -- | the idea is that we have 2 multiple identically named nodes in the list (one from each xml)
 -- , which we need to combine into just 1
 -- nodemap. but this applies just as well for more than 2 if I want to generalise this later
-consolidateNodes :: (Error Text :> es) => [XML.Node] -> Eff es (EM.EnumMap LocalStructureId NodeMap)
-consolidateNodes xs = do
+consolidateNodes :: (Error Text :> es, Enum a) => (Int -> a) -> [XML.Node] -> Eff es (EM.EnumMap a NodeMap)
+consolidateNodes f xs = do
   let r = foldl' (\x n -> x <> XML.children n) [] xs
       eithers = mapM (\x -> case eitherNodeId "id" x of
         Left v -> first (v<>) $ eitherNodeId "local_id" x
         Right x' -> Right x') r
   byIds <- throwEither eithers
-  let idMap = map (bimap LocalStructureId toItemMap) byIds
-  pure (EM.fromListWith (<>) idMap)
-
-asRectangle :: Text -> Eff es Rectangle
-asRectangle = const $ error ""
-{-}
-parseSiteProperty :: (Error Text :> es) => XML.Node -> Eff es SiteProperty
-parseSiteProperty n = do
-  let m = nodeChildrenToMap n
-  ensureNoDuplicateIds n m
-  expectOnly ["id", "type", "owner_hfid", "structure_id"] m
-  sitePropertyId <- parseId SitePropertyId m
-  sitePropertyType <- mapM (readHelper "site property") =<< getNodeTextMaybe "type" m
-  ownerId <- HistoricalFigureId <$$> getNodeIntMaybe "owner_hfid" m
-  structureId <- LocalStructureId <$$> getNodeIntMaybe "structure_id" m
-  pure $ SiteProperty { sitePropertyId, sitePropertyType, ownerId, structureId }
-=
-parseRectangle :: (Error Text :> es) => Text -> Eff es Rectangle
-parseRectangle = biParseM' ":" parseCoords
--}
+  pure (EM.fromListWith (<>) $ map (bimap f toItemMap) byIds)

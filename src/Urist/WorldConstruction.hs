@@ -20,16 +20,20 @@ data WorldConstructionType =
     | Ocean
   deriving stock (Show, Read, Ord, Eq, Bounded, Enum, Generic)
 
-data WorldConstruction = Region
+data WorldConstruction = WorldConstruction
+{-} Region
   { worldConstructionId :: WorldConstructionId
   , name :: Text
   , worldConstructionType :: WorldConstructionType
   } deriving stock (Show)
-
-parseWorldConstruction :: (Error Text :> es) => Map ByteString XML.Node -> Eff es WorldConstruction
-parseWorldConstruction m = do
+-}
+parseWorldConstruction :: (Error Text :> es) => Eff es WorldConstruction
+parseWorldConstruction = do
+  pure WorldConstruction
+{-}
   expectOnly ["id", "name", "type"] m
   regionId <- parseId RegionId m
   name <- getNodeText "name" m
   --regionType <- parseType "region" m
   error ""--pure $ Region { regionId, name, regionType }
+  -}

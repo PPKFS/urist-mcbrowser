@@ -126,6 +126,13 @@ asCoord input = case T.split (==',') input of
   [x, y] -> (,) <$> parseInt x <*> parseInt y
   x -> throwError $ "expected a coordinate but got " <> show x
 
+asRectangle :: (Error Text :> es) => Text -> Eff es Rectangle
+asRectangle = asOnlyTwo <=< mapM asCoord . T.split (==':') . T.init
+
+asOnlyTwo :: (Error Text :> es, Show a) =>  [a] -> Eff es (a, a)
+asOnlyTwo [x, y] = pure (x, y)
+asOnlyTwo x = throwError $ "Expected only two items but found " <> show x
+
 takeNodeMapAs :: (State (Set Text) :> es) => ByteString -> Eff (Error Text : State NodeMap : es) a -> NodeMap -> Eff es (Maybe a)
 takeNodeMapAs n f = flip evalStateLocal $ do
   res <- runError $ do
@@ -151,3 +158,9 @@ mapMM f mxs = Trav.mapM f =<< mxs
 
 forMM :: (Traversable t, Monad m) => m (t a) -> (a -> m b) -> m (t b)
 forMM = flip mapMM
+
+verifyThat :: Error Text :> es => [(Bool, Text)] -> Eff es ()
+verifyThat = mapM_ (liftA2 unless fst (throwError . snd))
+
+takeEitherNode ::  (Error Text :> es, State NodeMap :> es) => ByteString -> ByteString -> Eff es (Either XML.Node XML.Node)
+takeEitherNode = (. flip (maybe . (Right <$>) . takeNode) (pure . Left)) . (>>=) . takeNodeMaybe

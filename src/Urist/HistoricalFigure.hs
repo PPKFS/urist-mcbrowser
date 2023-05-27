@@ -8,8 +8,10 @@ import Urist.Id
 
 data HistoricalFigure = HistoricalFigure
 
-parseHistoricalFigure :: (Error Text :> es) => XML.Node -> Eff es HistoricalFigure
-parseHistoricalFigure n = do
+parseHistoricalFigure :: (Error Text :> es) => Eff es HistoricalFigure
+parseHistoricalFigure = do
+	pure HistoricalFigure
+{-
   let m = nodeChildrenToMap n
   historicalFigureId  <- parseId HistoricalFigureId m
   name <- getNodeText "name" m
@@ -28,7 +30,7 @@ parseCaste = error ""
 parseRace :: Text -> Eff es a1
 parseRace = error ""
 
-{-
+
 <historical_figure>
 		<id>0</id>
 		<name>faci swelteredsilvers the wealthy</name>
