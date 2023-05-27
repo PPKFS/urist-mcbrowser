@@ -2,7 +2,6 @@ module Urist.Structure where
 
 import Solitude
 import Effectful.Error.Static
-import qualified Xeno.DOM as XML
 import Urist.ParseHelpers
 import Urist.Id
 
@@ -74,17 +73,22 @@ takeStructure = do
 takeTempleDevotion :: (Error Text :> es, State NodeMap :> es) => Eff es StructureType
 takeTempleDevotion = do
   -- vanilla is either of these two
-  hfid <- takeNodeMaybeAsInt "worship_hfid"
-  eid <- takeNodeMaybeAsInt "entity_id"
+  hfid <- HistoricalFigureId <$$> takeNodeMaybeAsInt "worship_hfid"
+  eid <- EntityId <$$> takeNodeMaybeAsInt "entity_id"
   -- and it seems in the dfhack file it's very explicitly spelled out, but we've already worked it out
   -- and these fields are identical to the above, or *should* be..
-  eid' <- takeNodeMaybe "religion"
-  hfid' <- takeNodeMaybe "deity"
-  _ <- takeNodeMaybe "deity_type"
+  eid' <- EntityId <$$> takeNodeMaybeAsInt "religion"
+  hfid' <- HistoricalFigureId <$$> takeNodeMaybeAsInt "deity"
+  dt <- takeNodeAsInt "deity_type"
+  verifyThat
+    [ (eid' == eid, "religion (in legends_plus) should be the same as entity_id")
+    , (hfid' == hfid, "deity (in legends plus) should be the same as worship_hfid")
+    , (if dt == 0 then isJust hfid' else isJust eid', "")
+    ]
 
   case (hfid, eid) of
-    (Just hf, Nothing) -> pure $ Temple . DeityDevotion . HistoricalFigureId $ hf
-    (Nothing, Just e) -> pure $ Temple . ReligionDevotion . EntityId $ e
+    (Just hf, Nothing) -> pure $ Temple . DeityDevotion $ hf
+    (Nothing, Just e) -> pure $ Temple . ReligionDevotion $ e
     x -> throwError $ "Expected a temple to have either an entity id xor a deity id but found " <> show x
 
 takeDungeonSubtype :: (Error Text :> es, State NodeMap :> es) => Eff es StructureType
