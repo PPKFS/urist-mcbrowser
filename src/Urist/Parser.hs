@@ -18,9 +18,7 @@ import qualified GHC.List as L
 import Urist.Landmass
 import Urist.Identity
 import Urist.Artifact
-import Urist.DanceForm
-import Urist.PoeticForm
-import Urist.MusicalForm
+import Urist.ArtisticForm
 import Urist.Entity
 import Urist.EntityPopulation
 import Urist.HistoricalEra
@@ -74,12 +72,13 @@ parseWorld m = do
     --undergroundRegions <- parseItems "underground_regions" parseUndergroundRegion
     --sites <- parseItems "sites" parseSite
     --landmasses <- parseItems "landmasses" parseLandmass
-
+    --danceForms <- parseItems "dance_forms" (parseArtisticForm (Proxy @'Dance))
+    --poeticForms <- parseItems "poetic_forms" (parseArtisticForm (Proxy @'Poetic))
+    --musicalForms <- parseItems "musical_forms"  (parseArtisticForm (Proxy @'Musical))
+{-
     identities <- parseItems "identities" parseIdentity
     artifacts <- parseItems "artifacts" parseArtifact
-    danceForms <- parseItems "dance_forms" parseDanceForm
-    poeticForms <- parseItems "poetic_forms" parsePoeticForm
-    musicalForms <- parseItems "musical_forms" parseMusicalForm
+
     entities <- parseItems "entities" parseEntity
     entityPopulations <- parseItems "entity_populations" parseEntityPopulation
     historicalEras <- parseItems "historical_eras" parseHistoricalEra
@@ -90,6 +89,8 @@ parseWorld m = do
     historicalFigures <- parseItems "historical_figures" parseHistoricalFigure
     rivers <- parseItems "rivers" parseRiver
     worldConstructions <- parseItems "world_constructions" parseWorldConstruction
+
+  -}
     writtenContents <- parseItems "written_contents" parseWrittenContent
     print (M.keys m)
     seq m pass

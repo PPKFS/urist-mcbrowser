@@ -71,9 +71,7 @@ library
     Urist.Id
     Urist.Identity
     Urist.Artifact
-    Urist.DanceForm
-    Urist.PoeticForm
-    Urist.MusicalForm
+    Urist.ArtisticForm
     Urist.Entity
     Urist.EntityPopulation
     Urist.HistoricalEra

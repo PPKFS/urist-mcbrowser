@@ -90,7 +90,7 @@ takeNode = takeXmlItem >=> \case
   XMLItem (Right []) -> throwError "Found no nodes at all. Impossible?"
   XMLItem (Right l@(x:_)) -> case XML.name x of
     "id" -> pure x
-    other -> error $ "Found multiple matching nodes when expecting 1: " <> show other <> show l <> show (length l)
+    other -> throwError $ "Found multiple matching nodes when expecting 1: " <> show other <> show l <> show (length l)
 
 takeNodes :: (Error Text :> es, State NodeMap :> es) => ByteString -> Eff es (NonEmpty XML.Node)
 takeNodes n = takeNodesMaybe n >>= \case
@@ -105,6 +105,9 @@ takeNodesMaybe = takeXmlItemMaybe >=> \case
 
 takeNodesMaybeAsInt :: (Error Text :> es, State NodeMap :> es) => ByteString -> Eff es [Int]
 takeNodesMaybeAsInt = takeNodesMaybe >=> mapM asInt
+
+takeNodesAsText :: (Error Text :> es, State NodeMap :> es) => ByteString -> Eff es [Text]
+takeNodesAsText = takeNodesMaybe >=> mapM asText
 
 takeXmlItemMaybe :: (State NodeMap :> es) => ByteString -> Eff es (Maybe XMLItem)
 takeXmlItemMaybe k = simple %%= M.updateLookupWithKey (\_ _ -> Nothing) k
