@@ -25,7 +25,7 @@ throwMaybe = flip maybe pure . throwError
 eitherNodeText :: XML.Node -> Either Text Text
 eitherNodeText r = case XML.contents r of
   [XML.Text t] -> pure (decodeUtf8 t)
-  v -> Left $ "Expected a text node but instead got " <> show v
+  v -> Left $ "Expected a text node but instead got " <> show v <> " for " <> show r
 
 eitherNodeInt :: XML.Node -> Either Text Int
 eitherNodeInt = eitherNodeText >=> eitherParseInt
