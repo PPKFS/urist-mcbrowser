@@ -38,6 +38,13 @@ eitherNodeId idName n = do
   idNum <- eitherNodeInt idNode
   pure (idNum, c')
 
+eitherNodeTextId :: ByteString -> XML.Node -> Either Text (Text, [XML.Node])
+eitherNodeTextId idName n = do
+  let c' = XML.children n
+  idNode <- maybe (Left $ "could not find a node for " <> show n) Right $ find (\c -> XML.name c == idName) c'
+  idNodeText <- eitherNodeText idNode
+  pure (idNodeText, c')
+
 -- | Convert a list of nodes to a name-indexed map, and consolidate possible multiple-nodes.
 toItemMap :: [XML.Node] -> Map ByteString XMLItem
 toItemMap = M.map (XMLItem . \case

@@ -33,7 +33,7 @@ import Urist.WrittenContent
 
 data DfWorld
 
-parse :: (Breadcrumbs :> es, IOE :> es) => FilePath -> FilePath -> Eff es (Either (CallStack, Text) ())
+parse :: (Breadcrumbs :> es, IOE :> es, HasCallStack) => FilePath -> FilePath -> Eff es (Either (CallStack, Text) ())
 parse fp fp2 = withSpan' "XML parsing" "df_world" $ do
   vanillaFile <- liftIO $ readFileBS fp
   addAnnotation "Read vanilla legends.xml"
@@ -50,15 +50,15 @@ parse fp fp2 = withSpan' "XML parsing" "df_world" $ do
       --let removeToplevel x = fromMaybe (error "the dom did not have a top-level node?") $ viaNonEmpty head $ XML.children x)
     x -> error $ show x
 
-parseWorld :: (Breadcrumbs :> es, IOE :> es, Error Text :> es) => Map ByteString (Map Int [XML.Node]) -> Eff es ()
+parseWorld :: (Breadcrumbs :> es, IOE :> es, Error Text :> es) => Map ByteString (Map (Either Int Text) [XML.Node]) -> Eff es ()
 parseWorld m = do
   res <- runStateShared (S.empty @Text) $ do
-    let lookupOrThrow :: (Error Text :> es) => ByteString -> Eff es (Map Int NodeMap)
+    let lookupOrThrow :: (Error Text :> es) => ByteString -> Eff es (Map (Either Int Text) NodeMap)
         lookupOrThrow n = case n `M.lookup` m of
           Nothing -> throwError $ "Could not find node " <> show n
           Just r -> pure $ M.map toItemMap r
         parseItems :: (Breadcrumbs :> es, IOE :> es, State (Set Text) :> es, Error Text :> es)
-          => ByteString -> Eff (Error Text : State NodeMap : {- Concurrent :-} es) a -> Eff es (Map Int a)
+          => ByteString -> Eff (Error Text : State NodeMap : {- Concurrent :-} es) a -> Eff es (Map (Either Int Text) a)
         parseItems n f = do
           r <- lookupOrThrow n
           collection <- M.mapMaybe id <$> mapM {- runConcurrent $ mapConcurrently -} (takeNodeMapAs n f) r
@@ -75,53 +75,57 @@ parseWorld m = do
     --danceForms <- parseItems "dance_forms" (parseArtisticForm (Proxy @'Dance))
     --poeticForms <- parseItems "poetic_forms" (parseArtisticForm (Proxy @'Poetic))
     --musicalForms <- parseItems "musical_forms"  (parseArtisticForm (Proxy @'Musical))
+    --writtenContents <- parseItems "written_contents" parseWrittenContent
+    --historicalEras <- parseItems "historical_eras" parseHistoricalEra
+    rivers <- parseItems "rivers" parseRiver
 {-
     identities <- parseItems "identities" parseIdentity
     artifacts <- parseItems "artifacts" parseArtifact
 
     entities <- parseItems "entities" parseEntity
     entityPopulations <- parseItems "entity_populations" parseEntityPopulation
-    historicalEras <- parseItems "historical_eras" parseHistoricalEra
+
     historicalEventCollections <- parseItems "historical_event_collections" parseHistoricalEventCollection
     historicalEventRelationshipSupplements <- parseItems "historical_event_relationship_supplements" parseHistoricalEventRelationshipSupplement
     historicalEventRelationships <- parseItems "historical_event_relationships" parseHistoricalEventRelationship
     historicalEvents <- parseItems "historical_events" parseHistoricalEvent
     historicalFigures <- parseItems "historical_figures" parseHistoricalFigure
-    rivers <- parseItems "rivers" parseRiver
+
     worldConstructions <- parseItems "world_constructions" parseWorldConstruction
 
   -}
-    writtenContents <- parseItems "written_contents" parseWrittenContent
     print (M.keys m)
     seq m pass
   case res of
     (_, errs) -> mapM_ print errs
 
-getGlobalNode :: Error Text :> es => ByteString -> Map ByteString (Map Int [XML.Node]) -> Eff es XML.Node
-getGlobalNode n m = case M.lookup n m >>= M.lookup 0 >>= viaNonEmpty head of
+getGlobalNode :: Error Text :> es => ByteString -> Map ByteString (Map (Either Int Text) [XML.Node]) -> Eff es XML.Node
+getGlobalNode n m = case M.lookup n m >>= M.lookup (Left 0) >>= viaNonEmpty head of
   Nothing -> throwError $ "Could not find global node " <> show n <> show (M.lookup n m)
   Just r -> pure r
 
-buildIntermediateWorldRep :: XML.Node -> XML.Node -> Either Text (Map ByteString (Map Int [XML.Node]))
+buildIntermediateWorldRep :: XML.Node -> XML.Node -> Either Text (Map ByteString (Map (Either Int Text) [XML.Node]))
 buildIntermediateWorldRep vanilla plus =
   let -- given some node, we want to make it into a id-indexed map
-      nodeToIdMap :: XML.Node -> Either Text [(ByteString, Map Int [XML.Node])]
+      nodeToIdMap :: XML.Node -> Either Text [(ByteString, Map (Either Int Text) [XML.Node])]
       nodeToIdMap n = do
-        traverse (\childNode ->
-          if -- these are only in the plus xml so we can cheat a bit (also they don't have ids)
-            XML.name childNode `elem` [
-              "name"
-              , "altname"
-              , "creature_raw"
-              , "historical_eras"
-              , "rivers"
-              , "historical_event_relationships"
-              , "historical_event_relationship_supplements"
-              ]
-          then pure (XML.name childNode, M.singleton 0 [childNode])
-          else do
-            byIds <- mapM (eitherNodeId "id") $ XML.children childNode
-            pure (XML.name childNode, M.fromList byIds) ) (XML.children n)
+        traverse (\childNode -> do
+          traceShow (XML.name childNode) pass
+          case XML.name childNode of
+            x
+              | x `elem` ["creature_raw", "name", "altname"] ->
+                pure (XML.name childNode, M.singleton (Left 0) [childNode])
+            x
+              | x `elem` ["historical_eras", "rivers"] -> (do
+                    byIds <- mapM (eitherNodeTextId "name") $ XML.children childNode
+                    pure (XML.name childNode, M.fromList $ map (first Right) byIds) )
+            x
+              | x `elem` ["historical_event_relationships", "historical_event_relationship_supplements"] -> do
+                    byIds <- mapM (eitherNodeId "event") $ XML.children childNode
+                    pure (XML.name childNode, M.fromList $ map (first Left) byIds)
+            _ -> do
+                    byIds <- mapM (eitherNodeId "id") $ XML.children childNode
+                    pure (XML.name childNode, M.fromList $ map (first Left) byIds) ) (XML.children n)
   in do
     -- the children of vmap/pmap are the artifacts, dance_forms, etc.
     v <- M.fromList <$> nodeToIdMap vanilla

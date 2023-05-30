@@ -6,6 +6,14 @@ import Urist.ParseHelpers
 import Urist.Id
 
 data HistoricalEra = HistoricalEra
+  { name :: Text
+  , startYear :: Int
+  , endYear :: Maybe Int
+  }
 
 parseHistoricalEra :: (Error Text :> es, State NodeMap :> es) => Eff es HistoricalEra
-parseHistoricalEra = pure HistoricalEra
+parseHistoricalEra = do
+  name <- takeNodeAsText "name"
+  startYear <- takeNodeAsInt "start_year"
+  endYear <- takeNodeMaybeAsInt "end_year"
+  pure $ HistoricalEra { name, startYear, endYear }
