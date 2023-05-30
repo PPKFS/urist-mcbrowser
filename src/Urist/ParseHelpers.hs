@@ -25,6 +25,7 @@ throwMaybe = flip maybe pure . throwError
 eitherNodeText :: XML.Node -> Either Text Text
 eitherNodeText r = case XML.contents r of
   [XML.Text t] -> pure (decodeUtf8 t)
+  [] -> pure ""
   v -> Left $ "Expected a text node but instead got " <> show v <> " for " <> show r
 
 eitherNodeInt :: XML.Node -> Either Text Int
@@ -106,8 +107,11 @@ takeNodesMaybe = takeXmlItemMaybe >=> \case
 takeNodesMaybeAsInt :: (Error Text :> es, State NodeMap :> es) => ByteString -> Eff es [Int]
 takeNodesMaybeAsInt = takeNodesMaybe >=> mapM asInt
 
-takeNodesAsText :: (Error Text :> es, State NodeMap :> es) => ByteString -> Eff es [Text]
-takeNodesAsText = takeNodesMaybe >=> mapM asText
+takeNodesMaybeAsText :: (Error Text :> es, State NodeMap :> es) => ByteString -> Eff es [Text]
+takeNodesMaybeAsText = takeNodesMaybe >=> mapM asText
+
+takeNodesAsText :: (Error Text :> es, State NodeMap :> es) => ByteString -> Eff es (NonEmpty Text)
+takeNodesAsText = takeNodes >=> mapM asText
 
 takeXmlItemMaybe :: (State NodeMap :> es) => ByteString -> Eff es (Maybe XMLItem)
 takeXmlItemMaybe k = simple %%= M.updateLookupWithKey (\_ _ -> Nothing) k

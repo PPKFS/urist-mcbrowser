@@ -47,20 +47,25 @@ newtype CivilisationId = CivilisationId Int
   deriving stock (Generic)
 
 newtype LandmassId = LandmassId Int
-  deriving newtype (Show, Ord, Eq, Num, Bounded, Enum)
+  deriving newtype (Show, Ord, Eq, Num, Read, Bounded, Enum)
   deriving stock (Generic)
 
 newtype PoeticFormId = PoeticFormId Int
-  deriving newtype (Show, Ord, Eq, Num, Bounded, Enum)
+  deriving newtype (Show, Ord, Eq, Num, Read, Bounded, Enum)
   deriving stock (Generic)
 
 newtype DanceFormId = DanceFormId Int
-  deriving newtype (Show, Ord, Eq, Num, Bounded, Enum)
+  deriving newtype (Show, Ord, Eq, Num, Read, Bounded, Enum)
   deriving stock (Generic)
 
 newtype MusicalFormId = MusicalFormId Int
-  deriving newtype (Show, Ord, Eq, Num, Bounded, Enum)
+  deriving newtype (Show, Ord, Eq, Num, Read, Bounded, Enum)
   deriving stock (Generic)
+
+newtype HistoricalEventId = HistoricalEventId Int
+  deriving newtype (Show, Ord, Eq, Num, Read, Bounded, Enum)
+  deriving stock (Generic)
+
 
 type Coord = (Int, Int)
 
