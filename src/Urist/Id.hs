@@ -66,6 +66,9 @@ newtype HistoricalEventId = HistoricalEventId Int
   deriving newtype (Show, Ord, Eq, Num, Read, Bounded, Enum)
   deriving stock (Generic)
 
+newtype EntityPopulationId = EntityPopulationId Int
+  deriving newtype (Show, Ord, Eq, Num, Read, Bounded, Enum)
+  deriving stock (Generic)
 
 type Coord = (Int, Int)
 

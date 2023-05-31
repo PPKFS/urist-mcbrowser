@@ -77,13 +77,15 @@ parseWorld m = do
     --musicalForms <- parseItems "musical_forms"  (parseArtisticForm (Proxy @'Musical))
     --writtenContents <- parseItems "written_contents" parseWrittenContent
     --historicalEras <- parseItems "historical_eras" parseHistoricalEra
-    rivers <- parseItems "rivers" parseRiver
-{-
+    --rivers <- parseItems "rivers" parseRiver
+    --worldConstructions <- parseItems "world_constructions" parseWorldConstruction
+    --entityPopulations <- parseItems "entity_populations" parseEntityPopulation
     identities <- parseItems "identities" parseIdentity
+{-
     artifacts <- parseItems "artifacts" parseArtifact
 
+
     entities <- parseItems "entities" parseEntity
-    entityPopulations <- parseItems "entity_populations" parseEntityPopulation
 
     historicalEventCollections <- parseItems "historical_event_collections" parseHistoricalEventCollection
     historicalEventRelationshipSupplements <- parseItems "historical_event_relationship_supplements" parseHistoricalEventRelationshipSupplement
@@ -91,10 +93,7 @@ parseWorld m = do
     historicalEvents <- parseItems "historical_events" parseHistoricalEvent
     historicalFigures <- parseItems "historical_figures" parseHistoricalFigure
 
-    worldConstructions <- parseItems "world_constructions" parseWorldConstruction
-
   -}
-    print (M.keys m)
     seq m pass
   case res of
     (_, errs) -> mapM_ print errs

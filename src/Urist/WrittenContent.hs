@@ -146,8 +146,6 @@ asReference n = do
         "WRITTEN_CONTENT" -> WrittenContentRef <$> takeId WrittenContentId
         x -> throwError $ "Unknown written content reference :" <> x
 
-
-
 withFormId :: (Error Text :> es, State NodeMap :> es) => Eff es Int
 withFormId = takeNodeAsInt "form_id"
 
